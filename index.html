@@ -126,22 +126,27 @@
 
   <div class="box">
     <h2>ISBNを手入力</h2>
+
     <input
       type="text"
       id="isbnInput"
       inputmode="numeric"
       placeholder="ISBN-13を入力"
     >
+
     <button onclick="manualAdd()">追加</button>
   </div>
 
   <div class="box">
+
     <div class="total">
-      合計冊数：<span id="totalBooks">0</span>冊
+      合計冊数：
+      <span id="totalBooks">0</span>冊
     </div>
 
     <div class="total" style="margin-top:8px;">
-      合計本体価格：¥<span id="totalPrice">0</span>
+      合計本体価格：
+      ¥<span id="totalPrice">0</span>
     </div>
 
     <button class="secondary" onclick="undoLastBook()">
@@ -151,19 +156,32 @@
     <button class="danger" onclick="resetAll()">
       すべてリセット
     </button>
+
   </div>
 
   <div class="box">
+
     <h2>価格別冊数</h2>
+
     <ul id="priceList" class="price-list"></ul>
+
   </div>
 
   <div class="box">
+
     <h2>読み取った本</h2>
+
     <ul id="bookList" class="book-list"></ul>
+
   </div>
+
 
 <script>
+
+/* =========================
+   変数
+========================= */
+
 let codeReader = null;
 let controls = null;
 
@@ -174,7 +192,6 @@ let priceCounts = {};
 let books = [];
 
 let lastISBN = "";
-let processing = false;
 
 let pendingISBN = "";
 let pendingPrice = null;
@@ -183,55 +200,70 @@ let pendingTimer = null;
 let lastDetectedCode = "";
 let lastDetectedTime = 0;
 
-let statusTimer = null;
-
 
 /* =========================
-   基本処理
+   ステータス表示
 ========================= */
 
 function setStatus(message) {
-  const status = document.getElementById("status");
-  status.textContent = message;
 
-  if (statusTimer) {
-    clearTimeout(statusTimer);
-    statusTimer = null;
-  }
+  document.getElementById("status").textContent =
+    message;
+
 }
 
 
 /* =========================
-   ISBNチェック
+   ISBN-13チェック
 ========================= */
 
 function isValidISBN13(code) {
+
   if (!/^\d{13}$/.test(code)) {
     return false;
   }
 
-  if (!code.startsWith("978") && !code.startsWith("979")) {
+  if (
+    !code.startsWith("978") &&
+    !code.startsWith("979")
+  ) {
     return false;
   }
 
   let sum = 0;
 
   for (let i = 0; i < 12; i++) {
-    sum += Number(code[i]) * (i % 2 === 0 ? 1 : 3);
+
+    sum +=
+      Number(code[i]) *
+      (i % 2 === 0 ? 1 : 3);
+
   }
 
-  const checkDigit = (10 - (sum % 10)) % 10;
+  const checkDigit =
+    (10 - (sum % 10)) % 10;
 
   return checkDigit === Number(code[12]);
+
 }
 
 
 /* =========================
-   本の下側JANコード
-   192 + Cコード4桁 + 本体価格5桁 + チェック1桁
+   本の下側JANコードチェック
+=========================
+
+   192
+   ↓
+   Cコード4桁
+   ↓
+   本体価格5桁
+   ↓
+   チェックデジット1桁
+
 ========================= */
 
 function isValidBookJANSecondCode(code) {
+
   if (!/^\d{13}$/.test(code)) {
     return false;
   }
@@ -243,24 +275,40 @@ function isValidBookJANSecondCode(code) {
   let sum = 0;
 
   for (let i = 0; i < 12; i++) {
-    sum += Number(code[i]) * (i % 2 === 0 ? 1 : 3);
+
+    sum +=
+      Number(code[i]) *
+      (i % 2 === 0 ? 1 : 3);
+
   }
 
-  const checkDigit = (10 - (sum % 10)) % 10;
+  const checkDigit =
+    (10 - (sum % 10)) % 10;
 
   return checkDigit === Number(code[12]);
-}
 
-
-function getPriceFromBookJAN(code) {
-  const priceString = code.substring(7, 12);
-  return Number(priceString);
 }
 
 
 /* =========================
-   openBD
-   タイトル取得を最優先
+   下側JANから価格取得
+========================= */
+
+function getPriceFromBookJAN(code) {
+
+  /*
+    7～11文字目が本体価格5桁
+  */
+
+  return Number(
+    code.substring(7, 12)
+  );
+
+}
+
+
+/* =========================
+   openBDからタイトル取得
 ========================= */
 
 async function getBookInfo(isbn, barcodePrice) {
@@ -268,83 +316,175 @@ async function getBookInfo(isbn, barcodePrice) {
   let title = "";
   let onlinePrice = null;
 
+
   try {
-    const response = await fetch(
-      "https://api.openbd.jp/v1/get?isbn=" +
-      encodeURIComponent(isbn)
-    );
+
+    const response =
+      await fetch(
+        "https://api.openbd.jp/v1/get?isbn=" +
+        encodeURIComponent(isbn)
+      );
+
 
     if (response.ok) {
-      const data = await response.json();
-      const book = data && data[0];
+
+      const data =
+        await response.json();
+
+      const book =
+        data && data[0];
+
 
       if (book) {
-        if (book.summary && book.summary.title) {
-          title = book.summary.title;
+
+        /*
+          タイトル
+        */
+
+        if (
+          book.summary &&
+          book.summary.title
+        ) {
+
+          title =
+            book.summary.title;
+
         }
 
-        try {
-          const prices =
-            book.onix.ProductSupply.SupplyDetail.Price;
 
-          if (Array.isArray(prices)) {
-            for (const p of prices) {
-              const amount = Number(p.PriceAmount);
+        /*
+          価格バーコードが読めていない場合だけ、
+          openBDの価格を使う。
+        */
 
-              if (amount > 0) {
-                onlinePrice = amount;
-                break;
+        if (
+          barcodePrice === null ||
+          barcodePrice === undefined
+        ) {
+
+          try {
+
+            const prices =
+              book.onix
+                .ProductSupply
+                .SupplyDetail
+                .Price;
+
+
+            if (Array.isArray(prices)) {
+
+              for (const p of prices) {
+
+                const amount =
+                  Number(
+                    p.PriceAmount
+                  );
+
+
+                if (amount > 0) {
+
+                  onlinePrice =
+                    amount;
+
+                  break;
+
+                }
+
               }
+
             }
+
+          } catch (e) {
+
+            /*
+              価格情報がなければ
+              そのまま進める。
+            */
+
           }
-        } catch (e) {
-          // 価格情報がない本はそのまま進める
+
         }
+
       }
+
     }
-  } catch (e) {
-    // openBDが使えなくても続行
+
+  } catch (error) {
+
+    /*
+      openBDに接続できなくても、
+      バーコード価格があれば追加できる。
+    */
+
   }
 
 
   /*
-    価格バーコードが読めている場合は、
-    オンライン価格を一切使わない。
+    本のバーコード価格を最優先
   */
 
-  if (barcodePrice !== null && barcodePrice !== undefined) {
+  if (
+    barcodePrice !== null &&
+    barcodePrice !== undefined
+  ) {
+
     return {
-      title: title || "タイトル不明",
-      price: barcodePrice,
-      priceFromBarcode: true
+
+      title:
+        title || "タイトル不明",
+
+      price:
+        barcodePrice,
+
+      priceFromBarcode:
+        true
+
     };
+
   }
 
 
   /*
-    下側バーコードが読めなかった場合だけ
-    openBDの価格を使う。
+    バーコード価格がない場合だけ
+    openBD価格を使う。
   */
 
   if (onlinePrice !== null) {
+
     return {
-      title: title || "タイトル不明",
-      price: onlinePrice,
-      priceFromBarcode: false
+
+      title:
+        title || "タイトル不明",
+
+      price:
+        onlinePrice,
+
+      priceFromBarcode:
+        false
+
     };
+
   }
 
 
   /*
-    タイトルが取れなくても、
-    価格がない場合だけエラーにする。
+    タイトルは取れなくても、
+    価格がなければ追加できない。
   */
 
   return {
-    title: title || "タイトル不明",
-    price: null,
-    priceFromBarcode: false
+
+    title:
+      title || "タイトル不明",
+
+    price:
+      null,
+
+    priceFromBarcode:
+      false
+
   };
+
 }
 
 
@@ -352,71 +492,130 @@ async function getBookInfo(isbn, barcodePrice) {
    本を追加
 ========================= */
 
-async function addBook(isbn, barcodePrice = null) {
-
-  if (processing) {
-    return;
-  }
+async function addBook(
+  isbn,
+  barcodePrice = null
+) {
 
   if (!isValidISBN13(isbn)) {
-    setStatus("有効なISBN-13ではありません");
+
+    setStatus(
+      "有効なISBN-13ではありません"
+    );
+
     return;
+
   }
 
 
   /*
-    同じISBNの連続読み取り防止
+    同じ本の二重読み取り防止
   */
 
   if (isbn === lastISBN) {
-    setStatus("⚠️ 同じ本を続けて読み取りました");
+
+    setStatus(
+      "⚠️ 同じ本を続けて読み取りました"
+    );
+
     return;
+
   }
 
-  processing = true;
+
+  /*
+    ここでは「処理中だから次を無視する」
+    という制限をかけない。
+    
+    連続スキャンを優先する。
+  */
+
 
   try {
 
-    const info = await getBookInfo(isbn, barcodePrice);
+    const info =
+      await getBookInfo(
+        isbn,
+        barcodePrice
+      );
+
+
+    /*
+      価格が取れなかった場合
+    */
 
     if (info.price === null) {
+
       setStatus(
         `${info.title}：価格を取得できませんでした`
       );
 
-      processing = false;
       return;
+
     }
 
 
+    /*
+      本を追加
+    */
+
     const book = {
-      isbn: isbn,
-      title: info.title,
-      price: info.price
+
+      isbn:
+        isbn,
+
+      title:
+        info.title,
+
+      price:
+        info.price
+
     };
+
 
     books.push(book);
 
     totalBooks++;
-    totalPrice += info.price;
+
+    totalPrice +=
+      info.price;
+
+
+    /*
+      価格別冊数
+    */
 
     if (!priceCounts[info.price]) {
-      priceCounts[info.price] = 0;
+
+      priceCounts[info.price] =
+        0;
+
     }
 
     priceCounts[info.price]++;
 
-    updateDisplay();
 
-    lastISBN = isbn;
+    updateDisplay();
 
 
     /*
-      効果音
+      最後に読んだISBNを記録
+    */
+
+    lastISBN =
+      isbn;
+
+
+    /*
+      ビープ音
     */
 
     beep();
 
+
+    /*
+      ステータス
+    */
 
     if (info.priceFromBarcode) {
 
@@ -429,76 +628,108 @@ async function addBook(isbn, barcodePrice = null) {
       setStatus(
         `${info.title}（本体価格¥${info.price}）を追加しました`
       );
+
     }
 
 
     /*
-      連続読み取りを邪魔しないよう、
-      短時間だけ同じISBNを無視する。
+      0.5秒後に同じ本を再び読めるようにする
     */
 
     setTimeout(() => {
+
       if (lastISBN === isbn) {
+
         lastISBN = "";
+
       }
+
     }, 500);
+
 
   } catch (error) {
 
     console.error(error);
 
-    setStatus("本の情報を取得できませんでした");
+    setStatus(
+      "本の情報を取得できませんでした"
+    );
 
-  } finally {
-
-    processing = false;
   }
+
 }
 
 
 /* =========================
-   2本のバーコードを組み合わせる
+   ISBNと価格バーコードを
+   組み合わせる
 ========================= */
 
 function schedulePendingAdd() {
 
   if (pendingTimer) {
-    clearTimeout(pendingTimer);
+
+    clearTimeout(
+      pendingTimer
+    );
+
   }
 
+
   /*
-    以前の1.2秒から大幅短縮。
-    ISBNと価格バーコードが続けて読まれるなら、
-    ほぼ「ぴっぴっぴ」で処理できる。
+    ISBNと価格バーコードが
+    250ms以内に来たらセットで処理。
   */
 
-  pendingTimer = setTimeout(() => {
+  pendingTimer =
+    setTimeout(() => {
 
-    pendingTimer = null;
+      pendingTimer = null;
 
-    if (!pendingISBN) {
-      return;
-    }
 
-    const isbn = pendingISBN;
-    const price = pendingPrice;
+      if (!pendingISBN) {
+        return;
+      }
 
-    pendingISBN = "";
-    pendingPrice = null;
 
-    addBook(isbn, price);
+      const isbn =
+        pendingISBN;
 
-  }, 250);
+      const price =
+        pendingPrice;
+
+
+      /*
+        次の読み取りのために
+        先にクリア。
+      */
+
+      pendingISBN = "";
+
+      pendingPrice = null;
+
+
+      addBook(
+        isbn,
+        price
+      );
+
+
+    }, 250);
+
 }
 
 
 /* =========================
-   バーコード読み取り
+   バーコード処理
 ========================= */
 
 function handleBarcode(text) {
 
-  const code = String(text).replace(/\D/g, "");
+  const code =
+    String(text)
+      .replace(/\D/g, "");
+
 
   if (code.length !== 13) {
     return;
@@ -506,50 +737,74 @@ function handleBarcode(text) {
 
 
   /*
-    同じコードを短時間に何度も読んだ場合は無視
+    カメラが同じバーコードを
+    何度も検出するのを防止。
   */
 
-  const now = Date.now();
+  const now =
+    Date.now();
+
 
   if (
     code === lastDetectedCode &&
     now - lastDetectedTime < 500
   ) {
+
     return;
+
   }
 
-  lastDetectedCode = code;
-  lastDetectedTime = now;
+
+  lastDetectedCode =
+    code;
+
+  lastDetectedTime =
+    now;
 
 
   /*
-    上側：ISBN
+    ISBN
   */
 
   if (isValidISBN13(code)) {
 
-    pendingISBN = code;
+    pendingISBN =
+      code;
 
     schedulePendingAdd();
 
     return;
+
   }
 
 
   /*
-    下側：価格
+    下側価格バーコード
   */
 
-  if (isValidBookJANSecondCode(code)) {
+  if (
+    isValidBookJANSecondCode(code)
+  ) {
 
-    pendingPrice = getPriceFromBookJAN(code);
+    pendingPrice =
+      getPriceFromBookJAN(code);
+
+
+    /*
+      ISBNをすでに読んでいれば
+      すぐ追加処理を予約。
+    */
 
     if (pendingISBN) {
+
       schedulePendingAdd();
+
     }
 
     return;
+
   }
+
 }
 
 
@@ -559,64 +814,72 @@ function handleBarcode(text) {
 
 async function startCamera() {
 
-  codeReader = new ZXing.BrowserMultiFormatReader();
+  codeReader =
+    new ZXing.BrowserMultiFormatReader();
+
 
   try {
 
-    const devices =
-      await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-
-    if (!devices.length) {
-      setStatus("カメラが見つかりません");
-      return;
-    }
-
-
     /*
-      背面カメラを優先
+      iPhone Safariでは
+      listVideoInputDevices()で
+      カメラ一覧を取得してから
+      deviceIdを指定する方式より、
+
+      facingMode: environment
+
+      で背面カメラを直接指定する方が
+      安定しやすい。
     */
 
-    let selectedDeviceId = devices[0].deviceId;
+    controls =
+      await codeReader.decodeFromConstraints(
 
-    for (const device of devices) {
+        {
+          video: {
+            facingMode: {
+              ideal: "environment"
+            }
+          },
+          audio: false
+        },
 
-      const label =
-        (device.label || "").toLowerCase();
+        "reader",
 
-      if (
-        label.includes("back") ||
-        label.includes("rear") ||
-        label.includes("environment") ||
-        label.includes("背面")
-      ) {
-        selectedDeviceId = device.deviceId;
-        break;
-      }
-    }
+        (result, error) => {
 
+          if (result) {
 
-    controls = await codeReader.decodeFromVideoDevice(
-      selectedDeviceId,
-      "reader",
-      (result, error) => {
+            handleBarcode(
+              result.getText()
+            );
 
-        if (result) {
-          handleBarcode(result.getText());
+          }
+
         }
 
-      }
+      );
+
+
+    setStatus(
+      "バーコードを読み取れます"
     );
 
-    setStatus("バーコードを読み取れます");
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      "カメラ起動エラー:",
+      error
+    );
+
 
     setStatus(
       "カメラを起動できませんでした"
     );
+
   }
+
 }
 
 
@@ -627,10 +890,15 @@ async function startCamera() {
 function manualAdd() {
 
   const input =
-    document.getElementById("isbnInput");
+    document.getElementById(
+      "isbnInput"
+    );
+
 
   const isbn =
-    input.value.replace(/\D/g, "");
+    input.value
+      .replace(/\D/g, "");
+
 
   if (!isValidISBN13(isbn)) {
 
@@ -639,11 +907,18 @@ function manualAdd() {
     );
 
     return;
+
   }
+
 
   input.value = "";
 
-  addBook(isbn, null);
+
+  addBook(
+    isbn,
+    null
+  );
+
 }
 
 
@@ -653,11 +928,24 @@ function manualAdd() {
 
 function updateDisplay() {
 
-  document.getElementById("totalBooks").textContent =
-    totalBooks.toLocaleString();
+  /*
+    合計冊数
+  */
 
-  document.getElementById("totalPrice").textContent =
-    totalPrice.toLocaleString();
+  document
+    .getElementById("totalBooks")
+    .textContent =
+      totalBooks.toLocaleString();
+
+
+  /*
+    合計価格
+  */
+
+  document
+    .getElementById("totalPrice")
+    .textContent =
+      totalPrice.toLocaleString();
 
 
   /*
@@ -665,23 +953,37 @@ function updateDisplay() {
   */
 
   const priceList =
-    document.getElementById("priceList");
+    document.getElementById(
+      "priceList"
+    );
 
-  priceList.innerHTML = "";
+
+  priceList.innerHTML =
+    "";
+
 
   const prices =
     Object.keys(priceCounts)
       .map(Number)
-      .sort((a, b) => a - b);
+      .sort(
+        (a, b) => a - b
+      );
+
 
   for (const price of prices) {
 
-    const li = document.createElement("li");
+    const li =
+      document.createElement(
+        "li"
+      );
+
 
     li.textContent =
       `¥${price.toLocaleString()}：${priceCounts[price]}冊`;
 
+
     priceList.appendChild(li);
+
   }
 
 
@@ -690,13 +992,22 @@ function updateDisplay() {
   */
 
   const bookList =
-    document.getElementById("bookList");
+    document.getElementById(
+      "bookList"
+    );
 
-  bookList.innerHTML = "";
+
+  bookList.innerHTML =
+    "";
+
 
   for (const book of books) {
 
-    const li = document.createElement("li");
+    const li =
+      document.createElement(
+        "li"
+      );
+
 
     li.innerHTML =
       `<strong>${escapeHtml(book.title)}</strong><br>` +
@@ -704,8 +1015,11 @@ function updateDisplay() {
       `${book.isbn} / 本体価格¥${book.price.toLocaleString()}` +
       `</span>`;
 
+
     bookList.appendChild(li);
+
   }
+
 }
 
 
@@ -716,11 +1030,32 @@ function updateDisplay() {
 function escapeHtml(text) {
 
   return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+
+    .replace(
+      /</g,
+      "&lt;"
+    )
+
+    .replace(
+      />/g,
+      "&gt;"
+    )
+
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+
 }
 
 
@@ -731,31 +1066,55 @@ function escapeHtml(text) {
 function undoLastBook() {
 
   if (!books.length) {
-    setStatus("取り消す本がありません");
+
+    setStatus(
+      "取り消す本がありません"
+    );
+
     return;
+
   }
 
-  const book = books.pop();
+
+  const book =
+    books.pop();
+
 
   totalBooks--;
-  totalPrice -= book.price;
+
+  totalPrice -=
+    book.price;
+
 
   priceCounts[book.price]--;
 
-  if (priceCounts[book.price] <= 0) {
-    delete priceCounts[book.price];
+
+  if (
+    priceCounts[book.price] <= 0
+  ) {
+
+    delete priceCounts[
+      book.price
+    ];
+
   }
+
 
   lastISBN =
     books.length
-      ? books[books.length - 1].isbn
+      ? books[
+          books.length - 1
+        ].isbn
       : "";
 
+
   updateDisplay();
+
 
   setStatus(
     `${book.title}を取り消しました`
   );
+
 }
 
 
@@ -770,28 +1129,45 @@ function resetAll() {
       "読み取った本をすべてリセットしますか？"
     )
   ) {
+
     return;
+
   }
 
+
   totalBooks = 0;
+
   totalPrice = 0;
 
   priceCounts = {};
+
   books = [];
 
   lastISBN = "";
 
   pendingISBN = "";
+
   pendingPrice = null;
 
+
   if (pendingTimer) {
-    clearTimeout(pendingTimer);
+
+    clearTimeout(
+      pendingTimer
+    );
+
     pendingTimer = null;
+
   }
+
 
   updateDisplay();
 
-  setStatus("リセットしました");
+
+  setStatus(
+    "リセットしました"
+  );
+
 }
 
 
@@ -807,40 +1183,62 @@ function beep() {
       window.AudioContext ||
       window.webkitAudioContext;
 
+
     const audioContext =
       new AudioContext();
+
 
     const oscillator =
       audioContext.createOscillator();
 
+
     const gain =
       audioContext.createGain();
 
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
 
-    oscillator.frequency.value = 1000;
-    oscillator.type = "sine";
+    oscillator.connect(gain);
+
+    gain.connect(
+      audioContext.destination
+    );
+
+
+    oscillator.frequency.value =
+      1000;
+
+    oscillator.type =
+      "sine";
+
 
     gain.gain.setValueAtTime(
       0.08,
       audioContext.currentTime
     );
 
+
     gain.gain.exponentialRampToValueAtTime(
       0.001,
       audioContext.currentTime + 0.08
     );
 
+
     oscillator.start();
+
 
     oscillator.stop(
       audioContext.currentTime + 0.08
     );
 
-  } catch (e) {
-    // 音が使えなくても本体処理には影響させない
+
+  } catch (error) {
+
+    /*
+      音が使えなくても
+      本体処理には影響させない。
+    */
+
   }
+
 }
 
 
@@ -849,6 +1247,7 @@ function beep() {
 ========================= */
 
 startCamera();
+
 updateDisplay();
 
 </script>
