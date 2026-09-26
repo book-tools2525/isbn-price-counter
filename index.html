@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -34,8 +35,6 @@
       font-weight: bold;
       margin-bottom: 12px;
     }
-
-    /* カメラ */
 
     #reader {
       position: relative;
@@ -110,8 +109,6 @@
       margin-top: 8px;
     }
 
-    /* 金額 */
-
     .totals {
       display: flex;
       justify-content: space-around;
@@ -128,8 +125,6 @@
       color: #666;
       margin-top: 3px;
     }
-
-    /* 本一覧 */
 
     .book {
       background: #fafafa;
@@ -153,8 +148,6 @@
       font-weight: bold;
       margin-top: 4px;
     }
-
-    /* 金額一覧 */
 
     .price-row {
       display: flex;
@@ -188,177 +181,179 @@
       padding: 10px 0;
     }
 
-    /* 1冊戻る */
-
     #undoButton {
       background: #555;
     }
-
-    /* リセット */
 
     #resetButton {
       background: #b00020;
     }
   </style>
+
 </head>
 
 <body>
 
   <h1>ISBNカウンター</h1>
 
-
   <!-- カメラ -->
 
   <div class="box">
 
-    <div class="box-title">カメラ</div>
+```
+<div class="box-title">カメラ</div>
 
-    <div id="reader">
+<div id="reader">
 
-      <video
-        id="video"
-        autoplay
-        playsinline
-        muted>
-      </video>
+  <video
+    id="video"
+    autoplay
+    playsinline
+    muted>
+  </video>
 
-      <div class="guide"></div>
+  <div class="guide"></div>
 
-      <div class="guide-text">
-        ISBNバーコードを緑枠に合わせてください
-      </div>
-
-    </div>
-
-    <div id="status" class="status">
-      「カメラを起動」を押してください
-    </div>
-
-    <button id="startButton">
-      カメラを起動
-    </button>
-
-    <button id="stopButton">
-      カメラを停止
-    </button>
-
+  <div class="guide-text">
+    ISBNバーコードを緑枠に合わせてください
   </div>
 
+</div>
+
+<div id="status" class="status">
+  「カメラを起動」を押してください
+</div>
+
+<button id="startButton">
+  カメラを起動
+</button>
+
+<button id="stopButton">
+  カメラを停止
+</button>
+```
+
+  </div>
 
   <!-- 手入力 -->
 
   <div class="box">
 
-    <div class="box-title">手入力</div>
+```
+<div class="box-title">手入力</div>
 
-    <input
-      id="isbnInput"
-      type="text"
-      inputmode="numeric"
-      placeholder="978xxxxxxxxxx">
+<input
+  id="isbnInput"
+  type="text"
+  inputmode="numeric"
+  placeholder="978xxxxxxxxxx">
 
-    <button id="manualButton">
-      ISBNを追加
-    </button>
+<button id="manualButton">
+  ISBNを追加
+</button>
+```
 
   </div>
-
 
   <!-- 金額 -->
 
   <div class="box">
 
-    <div class="box-title">金額</div>
+```
+<div class="box-title">金額</div>
 
-    <div class="totals">
+<div class="totals">
 
-      <div>
-        <div
-          class="total-number"
-          id="totalBooks">
-          0
-        </div>
-
-        <div class="total-label">
-          冊
-        </div>
-      </div>
-
-
-      <div>
-        <div class="total-number">
-          ¥<span id="totalPrice">0</span>
-        </div>
-
-        <div class="total-label">
-          合計本体価格
-        </div>
-      </div>
-
+  <div>
+    <div
+      class="total-number"
+      id="totalBooks">
+      0
     </div>
 
+    <div class="total-label">
+      冊
+    </div>
   </div>
 
+  <div>
+    <div class="total-number">
+      ¥<span id="totalPrice">0</span>
+    </div>
+
+    <div class="total-label">
+      合計本体価格
+    </div>
+  </div>
+
+</div>
+```
+
+  </div>
 
   <!-- 1冊戻る -->
 
   <div class="box">
 
-    <button id="undoButton">
-      1冊戻る
-    </button>
+```
+<button id="undoButton">
+  1冊戻る
+</button>
+```
 
   </div>
-
 
   <!-- 読み取った本の一覧 -->
 
   <div class="box">
 
-    <div class="box-title">
-      読み取った本の一覧
-    </div>
+```
+<div class="box-title">
+  読み取った本の一覧
+</div>
 
-    <div id="bookList">
+<div id="bookList">
 
-      <div class="empty">
-        まだ本がありません
-      </div>
-
-    </div>
-
+  <div class="empty">
+    まだ本がありません
   </div>
 
+</div>
+```
+
+  </div>
 
   <!-- 金額別一覧 -->
 
   <div class="box">
 
-    <div class="box-title">
-      読み取った本の金額一覧
-    </div>
+```
+<div class="box-title">
+  読み取った本の金額一覧
+</div>
 
-    <div id="priceList">
+<div id="priceList">
 
-      <div class="empty">
-        まだ本がありません
-      </div>
-
-    </div>
-
+  <div class="empty">
+    まだ本がありません
   </div>
 
+</div>
+```
+
+  </div>
 
   <!-- リセット -->
 
   <div class="box">
 
-    <button id="resetButton">
-      すべてリセット
-    </button>
+```
+<button id="resetButton">
+  すべてリセット
+</button>
+```
 
   </div>
-
 
 <script>
 
@@ -539,7 +534,7 @@
      openBD
   ============================= */
 
-  async function getBookInfo(isbn) {
+  async function getBookInfoFromOpenBD(isbn) {
 
     const url =
       "https://api.openbd.jp/v1/get?isbn=" +
@@ -565,7 +560,7 @@
     ) {
 
       throw new Error(
-        "本が見つかりません"
+        "openBD 本が見つかりません"
       );
 
     }
@@ -620,7 +615,7 @@
     } catch (e) {
 
       console.log(
-        "価格取得エラー",
+        "openBD価格取得エラー",
         e
       );
 
@@ -631,15 +626,219 @@
     ) {
 
       throw new Error(
-        "価格情報なし"
+        "openBD価格情報なし"
       );
 
     }
 
     return {
       title,
-      price
+      price,
+      source: "openBD"
     };
+
+  }
+
+
+  /* =============================
+     Google Books
+  ============================= */
+
+  async function getBookInfoFromGoogleBooks(isbn) {
+
+    const url =
+      "https://www.googleapis.com/books/v1/volumes?q=isbn:" +
+      encodeURIComponent(isbn) +
+      "&country=JP&maxResults=5";
+
+    const response =
+      await fetch(url);
+
+    if (!response.ok) {
+
+      throw new Error(
+        "Google Books error"
+      );
+
+    }
+
+    const data =
+      await response.json();
+
+    if (
+      !data ||
+      !Array.isArray(data.items) ||
+      data.items.length === 0
+    ) {
+
+      throw new Error(
+        "Google Books 本が見つかりません"
+      );
+
+    }
+
+
+    /*
+      ISBNが一致するものを優先する。
+    */
+
+    let selectedItem = null;
+
+    for (
+      const item of data.items
+    ) {
+
+      const identifiers =
+        item.volumeInfo &&
+        item.volumeInfo.industryIdentifiers;
+
+      if (
+        Array.isArray(identifiers)
+      ) {
+
+        const matched =
+          identifiers.some(
+            identifier =>
+              normalizeISBN(
+                identifier.identifier
+              ) === isbn
+          );
+
+        if (matched) {
+
+          selectedItem = item;
+          break;
+
+        }
+
+      }
+
+    }
+
+
+    if (!selectedItem) {
+
+      selectedItem =
+        data.items[0];
+
+    }
+
+
+    const volumeInfo =
+      selectedItem.volumeInfo || {};
+
+    const saleInfo =
+      selectedItem.saleInfo || {};
+
+    const title =
+      volumeInfo.title ||
+      "タイトル不明";
+
+
+    /*
+      日本円のlistPriceだけを採用。
+      listPriceはGoogle Booksの
+      「Suggested retail price」
+      （希望小売価格）。
+    */
+
+    let price = null;
+
+
+    if (
+      saleInfo.listPrice &&
+      saleInfo.listPrice.currencyCode === "JPY" &&
+      saleInfo.listPrice.amount !== undefined
+    ) {
+
+      const amount =
+        Number(
+          saleInfo.listPrice.amount
+        );
+
+      if (
+        Number.isFinite(amount) &&
+        amount > 0
+      ) {
+
+        price =
+          Math.round(amount);
+
+      }
+
+    }
+
+
+    if (
+      price === null
+    ) {
+
+      throw new Error(
+        "Google Books価格情報なし"
+      );
+
+    }
+
+
+    return {
+      title,
+      price,
+      source: "Google Books"
+    };
+
+  }
+
+
+  /* =============================
+     本情報取得
+     openBD → Google Books
+  ============================= */
+
+  async function getBookInfo(isbn) {
+
+    /*
+      まずopenBD
+    */
+
+    try {
+
+      return await getBookInfoFromOpenBD(
+        isbn
+      );
+
+    } catch (openBDError) {
+
+      console.log(
+        "openBDで取得できなかったためGoogle Booksを試します:",
+        openBDError
+      );
+
+    }
+
+
+    /*
+      openBDで取得できなかった場合
+      Google Books
+    */
+
+    try {
+
+      return await getBookInfoFromGoogleBooks(
+        isbn
+      );
+
+    } catch (googleError) {
+
+      console.log(
+        "Google Booksでも取得できませんでした:",
+        googleError
+      );
+
+      throw new Error(
+        "価格情報なし"
+      );
+
+    }
 
   }
 
@@ -884,8 +1083,23 @@
       beep();
 
 
-      statusText.textContent =
-        `${book.title}（本体価格¥${book.price.toLocaleString()}）を追加しました`;
+      /*
+        取得元を表示
+      */
+
+      if (
+        book.source === "Google Books"
+      ) {
+
+        statusText.textContent =
+          `${book.title}（Google Books経由・本体価格¥${book.price.toLocaleString()}）を追加しました`;
+
+      } else {
+
+        statusText.textContent =
+          `${book.title}（本体価格¥${book.price.toLocaleString()}）を追加しました`;
+
+      }
 
 
     } catch (error) {
