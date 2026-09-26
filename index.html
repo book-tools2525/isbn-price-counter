@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ISBNカウンター</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+      color: #222;
+    }
+
+    h1 {
+      text-align: center;
+      margin: 0 0 20px;
+    }
+
+    .box {
+      background: white;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .box-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+
+    /* カメラ */
+
+    #reader {
+      position: relative;
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #000;
+    }
+
+    #video {
+      width: 100%;
+      display: block;
+      background: #000;
+    }
+
+    .guide {
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      top: 35%;
+      height: 30%;
+      border: 3px solid #00ff66;
+      border-radius: 8px;
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+
+    .guide-text {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 25%;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+      text-shadow: 0 1px 4px black;
+      pointer-events: none;
+    }
+
+    .status {
+      text-align: center;
+      font-weight: bold;
+      margin: 10px 0;
+      min-height: 24px;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      background: #333;
+      color: white;
+    }
+
+    button:active {
+      opacity: 0.7;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 13px;
+      font-size: 17px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      margin-top: 8px;
+    }
+
+    /* 金額 */
+
+    .totals {
+      display: flex;
+      justify-content: space-around;
+      text-align: center;
+    }
+
+    .total-number {
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    .total-label {
+      font-size: 13px;
+      color: #666;
+      margin-top: 3px;
+    }
+
+    /* 本一覧 */
+
+    .book {
+      background: #fafafa;
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 8px;
+      border: 1px solid #eee;
+    }
+
+    .book-title {
+      font-weight: bold;
+    }
+
+    .book-info {
+      font-size: 13px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .price {
+      font-weight: bold;
+      margin-top: 4px;
+    }
+
+    /* 金額一覧 */
+
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 11px 4px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .price-row:last-child {
+      border-bottom: none;
+    }
+
+    .price-name {
+      font-size: 17px;
+      font-weight: bold;
+    }
+
+    .price-count {
+      font-size: 16px;
+    }
+
+    .price-subtotal {
+      font-weight: bold;
+      margin-left: 8px;
+    }
+
+    .empty {
+      color: #888;
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    /* 1冊戻る */
+
+    #undoButton {
+      background: #555;
+    }
+
+    /* リセット */
+
+    #resetButton {
+      background: #b00020;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>ISBNカウンター</h1>
+
+
+  <!-- カメラ -->
+
+  <div class="box">
+
+    <div class="box-title">カメラ</div>
+
+    <div id="reader">
+
+      <video
+        id="video"
+        autoplay
+        playsinline
+        muted>
+      </video>
+
+      <div class="guide"></div>
+
+      <div class="guide-text">
+        ISBNバーコードを緑枠に合わせてください
+      </div>
+
+    </div>
+
+    <div id="status" class="status">
+      「カメラを起動」を押してください
+    </div>
+
+    <button id="startButton">
+      カメラを起動
+    </button>
+
+    <button id="stopButton">
+      カメラを停止
+    </button>
+
+  </div>
+
+
+  <!-- 手入力 -->
+
+  <div class="box">
+
+    <div class="box-title">手入力</div>
+
+    <input
+      id="isbnInput"
+      type="text"
+      inputmode="numeric"
+      placeholder="978xxxxxxxxxx">
+
+    <button id="manualButton">
+      ISBNを追加
+    </button>
+
+  </div>
+
+
+  <!-- 金額 -->
+
+  <div class="box">
+
+    <div class="box-title">金額</div>
+
+    <div class="totals">
+
+      <div>
+        <div
+          class="total-number"
+          id="totalBooks">
+          0
+        </div>
+
+        <div class="total-label">
+          冊
+        </div>
+      </div>
+
+
+      <div>
+        <div class="total-number">
+          ¥<span id="totalPrice">0</span>
+        </div>
+
+        <div class="total-label">
+          合計本体価格
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- 1冊戻る -->
+
+  <div class="box">
+
+    <button id="undoButton">
+      1冊戻る
+    </button>
+
+  </div>
+
+
+  <!-- 読み取った本の一覧 -->
+
+  <div class="box">
+
+    <div class="box-title">
+      読み取った本の一覧
+    </div>
+
+    <div id="bookList">
+
+      <div class="empty">
+        まだ本がありません
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- 金額別一覧 -->
+
+  <div class="box">
+
+    <div class="box-title">
+      読み取った本の金額一覧
+    </div>
+
+    <div id="priceList">
+
+      <div class="empty">
+        まだ本がありません
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- リセット -->
+
+  <div class="box">
+
+    <button id="resetButton">
+      すべてリセット
+    </button>
+
+  </div>
+
+
+<script>
+
+  /* =============================
+     要素
+  ============================= */
+
+  const video =
+    document.getElementById("video");
+
+  const statusText =
+    document.getElementById("status");
+
+  const startButton =
+    document.getElementById("startButton");
+
+  const stopButton =
+    document.getElementById("stopButton");
+
+  const isbnInput =
+    document.getElementById("isbnInput");
+
+  const manualButton =
+    document.getElementById("manualButton");
+
+  const totalBooksElement =
+    document.getElementById("totalBooks");
+
+  const totalPriceElement =
+    document.getElementById("totalPrice");
+
+  const bookList =
+    document.getElementById("bookList");
+
+  const priceList =
+    document.getElementById("priceList");
+
+  const undoButton =
+    document.getElementById("undoButton");
+
+  const resetButton =
+    document.getElementById("resetButton");
+
+
+  /* =============================
+     データ
+  ============================= */
+
+  let codeReader = null;
+  let controls = null;
+
+  let totalBooks = 0;
+  let totalPrice = 0;
+
+  let priceCounts = {};
+
+  let books = [];
+
+  let lastISBN = "";
+
+  let processing = false;
+
+
+  /* =============================
+     ビープ音
+  ============================= */
+
+  function beep() {
+
+    try {
+
+      const AudioContext =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+      const audioContext =
+        new AudioContext();
+
+      const oscillator =
+        audioContext.createOscillator();
+
+      const gain =
+        audioContext.createGain();
+
+      oscillator.frequency.value = 1000;
+
+      oscillator.type = "sine";
+
+      gain.gain.value = 0.15;
+
+      oscillator.connect(gain);
+
+      gain.connect(
+        audioContext.destination
+      );
+
+      oscillator.start();
+
+      setTimeout(() => {
+
+        oscillator.stop();
+
+        audioContext.close();
+
+      }, 100);
+
+    } catch (e) {
+
+      console.log(
+        "beep error",
+        e
+      );
+
+    }
+
+  }
+
+
+  /* =============================
+     ISBN整形
+  ============================= */
+
+  function normalizeISBN(value) {
+
+    return String(value || "")
+      .replace(/[^0-9]/g, "");
+
+  }
+
+
+  /* =============================
+     ISBN-13チェック
+  ============================= */
+
+  function isValidISBN13(isbn) {
+
+    isbn =
+      normalizeISBN(isbn);
+
+    if (
+      !/^(978|979)\d{10}$/.test(isbn)
+    ) {
+
+      return false;
+
+    }
+
+    let sum = 0;
+
+    for (
+      let i = 0;
+      i < 12;
+      i++
+    ) {
+
+      const digit =
+        Number(isbn[i]);
+
+      sum +=
+        i % 2 === 0
+          ? digit
+          : digit * 3;
+
+    }
+
+    const checkDigit =
+      (10 - (sum % 10)) % 10;
+
+    return (
+      checkDigit ===
+      Number(isbn[12])
+    );
+
+  }
+
+
+  /* =============================
+     openBD
+  ============================= */
+
+  async function getBookInfo(isbn) {
+
+    const url =
+      "https://api.openbd.jp/v1/get?isbn=" +
+      encodeURIComponent(isbn);
+
+    const response =
+      await fetch(url);
+
+    if (!response.ok) {
+
+      throw new Error(
+        "openBD error"
+      );
+
+    }
+
+    const data =
+      await response.json();
+
+    if (
+      !data ||
+      !data[0]
+    ) {
+
+      throw new Error(
+        "本が見つかりません"
+      );
+
+    }
+
+    const book =
+      data[0];
+
+    const summary =
+      book.summary || {};
+
+    const title =
+      summary.title ||
+      "タイトル不明";
+
+    let price = null;
+
+    try {
+
+      const prices =
+        book
+          .onix
+          .ProductSupply
+          .SupplyDetail
+          .Price;
+
+      if (
+        Array.isArray(prices)
+      ) {
+
+        for (
+          const p of prices
+        ) {
+
+          if (
+            p.PriceAmount !== undefined &&
+            Number(p.PriceAmount) > 0
+          ) {
+
+            price =
+              Number(
+                p.PriceAmount
+              );
+
+            break;
+
+          }
+
+        }
+
+      }
+
+    } catch (e) {
+
+      console.log(
+        "価格取得エラー",
+        e
+      );
+
+    }
+
+    if (
+      price === null
+    ) {
+
+      throw new Error(
+        "価格情報なし"
+      );
+
+    }
+
+    return {
+      title,
+      price
+    };
+
+  }
+
+
+  /* =============================
+     金額一覧更新
+  ============================= */
+
+  function updatePriceList() {
+
+    priceList.innerHTML = "";
+
+    const prices =
+      Object.keys(priceCounts)
+        .map(Number)
+        .sort(
+          (a, b) => b - a
+        );
+
+    if (
+      prices.length === 0
+    ) {
+
+      priceList.innerHTML = `
+        <div class="empty">
+          まだ本がありません
+        </div>
+      `;
+
+      return;
+
+    }
+
+    for (
+      const price of prices
+    ) {
+
+      const count =
+        priceCounts[price];
+
+      const subtotal =
+        price * count;
+
+      const row =
+        document.createElement("div");
+
+      row.className =
+        "price-row";
+
+      row.innerHTML = `
+
+        <div class="price-name">
+          ¥${price.toLocaleString()}
+        </div>
+
+        <div class="price-count">
+          ${count.toLocaleString()}冊
+
+          <span class="price-subtotal">
+            ¥${subtotal.toLocaleString()}
+          </span>
+        </div>
+
+      `;
+
+      priceList.appendChild(row);
+
+    }
+
+  }
+
+
+  /* =============================
+     本一覧更新
+  ============================= */
+
+  function updateBookList() {
+
+    bookList.innerHTML = "";
+
+    if (
+      books.length === 0
+    ) {
+
+      bookList.innerHTML = `
+        <div class="empty">
+          まだ本がありません
+        </div>
+      `;
+
+      return;
+
+    }
+
+    for (
+      let i = books.length - 1;
+      i >= 0;
+      i--
+    ) {
+
+      const book =
+        books[i];
+
+      const bookElement =
+        document.createElement("div");
+
+      bookElement.className =
+        "book";
+
+      bookElement.innerHTML = `
+
+        <div class="book-title">
+          ${escapeHTML(book.title)}
+        </div>
+
+        <div class="book-info">
+          ISBN: ${book.isbn}
+        </div>
+
+        <div class="price">
+          本体価格
+          ¥${book.price.toLocaleString()}
+        </div>
+
+      `;
+
+      bookList.appendChild(
+        bookElement
+      );
+
+    }
+
+  }
+
+
+  /* =============================
+     本を追加
+  ============================= */
+
+  async function addBook(isbn) {
+
+    isbn =
+      normalizeISBN(isbn);
+
+    if (
+      !isValidISBN13(isbn)
+    ) {
+
+      statusText.textContent =
+        "ISBN-13として認識できませんでした";
+
+      return;
+
+    }
+
+
+    /*
+      直前と同じISBNなら
+      計算しない
+    */
+
+    if (
+      isbn === lastISBN
+    ) {
+
+      statusText.textContent =
+        "⚠️ 直前と同じ本です。追加していません";
+
+      return;
+
+    }
+
+
+    if (processing) {
+
+      return;
+
+    }
+
+
+    processing = true;
+
+    statusText.textContent =
+      "本の情報を取得しています…";
+
+
+    try {
+
+      const book =
+        await getBookInfo(isbn);
+
+
+      const bookData = {
+
+        isbn: isbn,
+
+        title: book.title,
+
+        price: book.price
+
+      };
+
+
+      books.push(
+        bookData
+      );
+
+
+      totalBooks++;
+
+      totalPrice +=
+        book.price;
+
+
+      totalBooksElement.textContent =
+        totalBooks.toLocaleString();
+
+
+      totalPriceElement.textContent =
+        totalPrice.toLocaleString();
+
+
+      if (
+        priceCounts[book.price] === undefined
+      ) {
+
+        priceCounts[book.price] = 0;
+
+      }
+
+      priceCounts[book.price]++;
+
+
+      updateBookList();
+
+      updatePriceList();
+
+
+      lastISBN = isbn;
+
+
+      beep();
+
+
+      statusText.textContent =
+        `${book.title} を追加しました`;
+
+
+    } catch (error) {
+
+      console.error(error);
+
+      statusText.textContent =
+        "この本の価格情報を取得できませんでした";
+
+    } finally {
+
+      processing = false;
+
+      setTimeout(() => {
+
+        if (!processing) {
+
+          statusText.textContent =
+            "次の本を読み取れます";
+
+        }
+
+      }, 1800);
+
+    }
+
+  }
+
+
+  /* =============================
+     1冊戻る
+  ============================= */
+
+  function undoLastBook() {
+
+    if (
+      books.length === 0
+    ) {
+
+      statusText.textContent =
+        "戻せる本がありません";
+
+      return;
+
+    }
+
+
+    const removedBook =
+      books.pop();
+
+
+    totalBooks--;
+
+    totalPrice -=
+      removedBook.price;
+
+
+    priceCounts[
+      removedBook.price
+    ]--;
+
+
+    if (
+      priceCounts[
+        removedBook.price
+      ] <= 0
+    ) {
+
+      delete priceCounts[
+        removedBook.price
+      ];
+
+    }
+
+
+    if (
+      books.length > 0
+    ) {
+
+      lastISBN =
+        books[
+          books.length - 1
+        ].isbn;
+
+    } else {
+
+      lastISBN = "";
+
+    }
+
+
+    totalBooksElement.textContent =
+      totalBooks.toLocaleString();
+
+
+    totalPriceElement.textContent =
+      totalPrice.toLocaleString();
+
+
+    updateBookList();
+
+    updatePriceList();
+
+
+    statusText.textContent =
+      `${removedBook.title} を1冊取り消しました`;
+
+  }
+
+
+  /* =============================
+     HTMLエスケープ
+  ============================= */
+
+  function escapeHTML(text) {
+
+    const div =
+      document.createElement("div");
+
+    div.textContent =
+      text;
+
+    return div.innerHTML;
+
+  }
+
+
+  /* =============================
+     カメラ開始
+  ============================= */
+
+  async function startCamera() {
+
+    if (controls) {
+
+      return;
+
+    }
+
+
+    statusText.textContent =
+      "カメラを起動しています…";
+
+
+    try {
+
+      codeReader =
+        new ZXing.BrowserMultiFormatReader();
+
+
+      const videoInputDevices =
+        await codeReader
+          .listVideoInputDevices();
+
+
+      if (
+        !videoInputDevices.length
+      ) {
+
+        throw new Error(
+          "カメラが見つかりません"
+        );
+
+      }
+
+
+      let selectedDevice =
+        videoInputDevices.find(
+          device =>
+            /back|rear|environment/i.test(
+              device.label
+            )
+        );
+
+
+      if (!selectedDevice) {
+
+        selectedDevice =
+          videoInputDevices[
+            videoInputDevices.length - 1
+          ];
+
+      }
+
+
+      controls =
+        await codeReader
+          .decodeFromVideoDevice(
+            selectedDevice.deviceId,
+            video,
+            (result, error) => {
+
+              if (result) {
+
+                const text =
+                  result.getText();
+
+                console.log(
+                  "Barcode detected:",
+                  text
+                );
+
+
+                const isbn =
+                  normalizeISBN(text);
+
+
+                if (
+                  isValidISBN13(isbn)
+                ) {
+
+                  addBook(isbn);
+
+                } else {
+
+                  console.log(
+                    "ISBNではないバーコード:",
+                    text
+                  );
+
+                }
+
+              }
+
+            }
+          );
+
+
+      statusText.textContent =
+        "ISBNバーコードを緑枠に合わせてください";
+
+
+    } catch (error) {
+
+      console.error(error);
+
+      statusText.textContent =
+        "カメラを起動できませんでした";
+
+    }
+
+  }
+
+
+  /* =============================
+     カメラ停止
+  ============================= */
+
+  function stopCamera() {
+
+    if (controls) {
+
+      controls.stop();
+
+      controls = null;
+
+    }
+
+
+    if (codeReader) {
+
+      try {
+
+        codeReader.reset();
+
+      } catch (e) {}
+
+    }
+
+
+    if (video.srcObject) {
+
+      video.srcObject
+        .getTracks()
+        .forEach(
+          track =>
+            track.stop()
+        );
+
+      video.srcObject = null;
+
+    }
+
+
+    statusText.textContent =
+      "カメラを停止しました";
+
+  }
+
+
+  /* =============================
+     手入力
+  ============================= */
+
+  manualButton.addEventListener(
+    "click",
+    () => {
+
+      const isbn =
+        normalizeISBN(
+          isbnInput.value
+        );
+
+
+      addBook(isbn);
+
+
+      isbnInput.value = "";
+
+    }
+  );
+
+
+  isbnInput.addEventListener(
+    "keydown",
+    event => {
+
+      if (
+        event.key === "Enter"
+      ) {
+
+        manualButton.click();
+
+      }
+
+    }
+  );
+
+
+  /* =============================
+     ボタン
+  ============================= */
+
+  startButton.addEventListener(
+    "click",
+    startCamera
+  );
+
+
+  stopButton.addEventListener(
+    "click",
+    stopCamera
+  );
+
+
+  undoButton.addEventListener(
+    "click",
+    undoLastBook
+  );
+
+
+  /* =============================
+     リセット
+  ============================= */
+
+  resetButton.addEventListener(
+    "click",
+    () => {
+
+      if (
+        !confirm(
+          "冊数・合計金額・読み取り履歴をすべてリセットしますか？"
+        )
+      ) {
+
+        return;
+
+      }
+
+
+      totalBooks = 0;
+
+      totalPrice = 0;
+
+      priceCounts = {};
+
+      books = [];
+
+      lastISBN = "";
+
+      processing = false;
+
+
+      totalBooksElement.textContent =
+        "0";
+
+
+      totalPriceElement.textContent =
+        "0";
+
+
+      updateBookList();
+
+      updatePriceList();
+
+
+      isbnInput.value = "";
+
+
+      statusText.textContent =
+        "次の本を読み取れます";
+
+    }
+  );
+
+
+</script>
+
+</body>
+</html>
