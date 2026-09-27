@@ -317,14 +317,19 @@ let lastISBN = "";
 let processingISBN = "";
 
 /*
- * true：
- * ISBNから書誌情報を取得できず、
- * 下段JANを待っている状態
- *
- * false：
- * 通常のISBN受付状態
+ * ISBNの情報取得に失敗して、
+ * 下段JANを待っている状態かどうか
  */
 let waitingForSecondJAN = false;
+
+/*
+ * 現在、下段JANを待っている
+ * 「直前のISBN」
+ *
+ * JANから登録するとき、
+ * このISBNを本の一覧に保存する。
+ */
+let waitingISBN = "";
 
 const video =
   document.getElementById("video");
@@ -363,7 +368,7 @@ const resetButton =
 /*
  * カメラ起動
  *
- * ここは現在動作している実装を維持。
+ * 現在動作している実装をそのまま維持。
  */
 async function startCamera() {
 
@@ -484,16 +489,6 @@ function isValidISBN13(code) {
 
 /*
  * 下段JANチェック
- *
- * 一般的な書籍の下段コード：
- *
- * 192
- * ＋ Cコード4桁
- * ＋ 本体価格5桁
- * ＋ チェックデジット
- *
- * 例：
- * 1921234560701
  */
 function isValidBookJANSecondCode(code) {
 
@@ -688,8 +683,6 @@ async function getBookInfoFromOpenBD(isbn) {
  * 本を登録
  *
  * ISBNは空でもOK。
- * 下段JANから登録する本には
- * ISBNがないため。
  */
 function addBookRecord(
   isbn,
@@ -820,6 +813,11 @@ async function handleISBN(isbn) {
 
       waitingForSecondJAN = false;
 
+      /*
+       * 念のため待機ISBNも消す。
+       */
+      waitingISBN = "";
+
       statusText.classList.remove(
         "error"
       );
@@ -836,11 +834,13 @@ async function handleISBN(isbn) {
   }
 
   /*
-   * ここまで来たらISBN失敗。
+   * ISBN失敗。
    *
-   * この瞬間から下段JANだけ受け付ける。
+   * このISBNを覚えておく。
    */
   waitingForSecondJAN = true;
+
+  waitingISBN = isbn;
 
   statusText.classList.add(
     "error"
@@ -878,22 +878,29 @@ function handleBookJAN(code) {
   }
 
   /*
-   * ISBN失敗後の待機状態なので
-   * ここで登録したら即座に待機解除。
-   *
-   * これにより、カメラが同じJANを
-   * 何度読み取っても2冊目以降は登録されない。
+   * ISBN失敗後に保存しておいたISBNを使う。
    */
+  const isbn =
+    waitingISBN;
+
   const added =
     addBookRecord(
-      "",
+      isbn,
       "タイトル不明",
       price
     );
 
   if (added) {
 
+    /*
+     * 1回登録したら即座に待機解除。
+     *
+     * 同じJANがカメラに映り続けても
+     * 2冊目以降は登録されない。
+     */
     waitingForSecondJAN = false;
+
+    waitingISBN = "";
 
     statusText.classList.remove(
       "error"
@@ -927,8 +934,8 @@ function handleBarcode(text) {
    * ============================
    *
    * ISBNの情報取得に失敗して
-   * 「下段JANを待っている状態」の
-   * ときだけ受け付ける。
+   * 下段JANを待っているときだけ
+   * 受け付ける。
    */
   if (
     isValidBookJANSecondCode(code)
@@ -952,8 +959,8 @@ function handleBarcode(text) {
    * 下段JAN待ち中
    * ============================
    *
-   * この状態では別のISBNや
-   * その他のバーコードを無視。
+   * 別のISBNやその他のコードを
+   * 無視する。
    */
   if (waitingForSecondJAN) {
     return;
@@ -1072,6 +1079,8 @@ async function addManualISBN() {
 
       waitingForSecondJAN = false;
 
+      waitingISBN = "";
+
       statusText.classList.remove(
         "error"
       );
@@ -1092,9 +1101,12 @@ async function addManualISBN() {
   /*
    * ISBN失敗。
    *
-   * ここから下段JANのみ受付。
+   * このISBNを覚えておいて、
+   * 下段JANとセットで登録する。
    */
   waitingForSecondJAN = true;
+
+  waitingISBN = isbn;
 
   statusText.classList.add(
     "error"
@@ -1358,6 +1370,8 @@ function resetAll() {
   processingISBN = "";
 
   waitingForSecondJAN = false;
+
+  waitingISBN = "";
 
   statusText.classList.remove(
     "error"
