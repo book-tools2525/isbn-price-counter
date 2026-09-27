@@ -274,11 +274,26 @@
   let priceCounts = {};
 
   /*
-   * 直前に処理したISBN
+   * 最後に正常処理したISBN
    *
-   * 同じISBNが連続した場合にエラーを出すために使用。
+   * 同じISBNを映し続けた場合の
+   * 重複チェックに使用。
    */
   let lastISBN = "";
+
+  /*
+   * 現在openBD検索中のISBN
+   *
+   * カメラが同じISBNを何度も読んでも
+   * 同じ検索を重複して実行しないために使用。
+   */
+  let processingISBN = "";
+
+  /*
+   * ISBNの情報取得に失敗し、
+   * 2段目JANを待っている状態。
+   */
+  let waitingForSecondJAN = false;
 
 
   const video =
@@ -591,8 +606,13 @@
     price
   ) {
 
+    /*
+     * ISBNは空でもOK。
+     *
+     * 2段目JANから追加する本は
+     * ISBNが存在しないため。
+     */
     if (
-      !isbn ||
       price == null
     ) {
       return false;
@@ -610,7 +630,7 @@
 
 
     const book = {
-      isbn: isbn,
+      isbn: isbn || "",
       title:
         title || "タイトル不明",
       price: price
@@ -648,9 +668,33 @@
   async function handleISBN(isbn) {
 
     /*
-     * 同じISBNを連続して読んだ場合
+     * 2段目を待っている場合、
+     * ISBNは処理しない。
      *
-     * 以前の仕様に戻す。
+     * 「下のバーコードをスキャンしてください」
+     * の状態を維持する。
+     */
+    if (waitingForSecondJAN) {
+      return;
+    }
+
+
+    /*
+     * 現在同じISBNを検索中なら無視。
+     *
+     * カメラが同じバーコードを
+     * 何度も返すことへの対策。
+     */
+    if (
+      processingISBN === isbn
+    ) {
+      return;
+    }
+
+
+    /*
+     * 正常処理済みのISBNを
+     * 再び映した場合はエラー。
      */
     if (
       lastISBN === isbn
@@ -668,10 +712,9 @@
 
 
     /*
-     * このISBNを
-     * 「最後に処理したISBN」とする
+     * このISBNを検索中にする。
      */
-    lastISBN = isbn;
+    processingISBN = isbn;
 
 
     statusText.classList.remove(
@@ -686,6 +729,12 @@
       await getBookInfoFromOpenBD(
         isbn
       );
+
+
+    /*
+     * 検索完了
+     */
+    processingISBN = "";
 
 
     /*
@@ -711,6 +760,18 @@
 
       if (added) {
 
+        /*
+         * 正常に登録できたISBNだけ
+         * 重複チェック対象にする。
+         */
+        lastISBN = isbn;
+
+        waitingForSecondJAN = false;
+
+        statusText.classList.remove(
+          "error"
+        );
+
         statusText.textContent =
           info.title +
           " / " +
@@ -723,11 +784,18 @@
 
 
     /*
-     * タイトルはあるが
-     * 価格がない場合
+     * ここからはISBNだけでは
+     * 価格を確定できなかった状態。
      *
-     * → ISBNだけでは価格を確定できない
+     * 2段目JANを待つ。
      */
+
+    waitingForSecondJAN = true;
+
+    statusText.classList.add(
+      "error"
+    );
+
 
     if (
       info &&
@@ -738,24 +806,17 @@
         info.title +
         "：価格情報が見つかりません。下のバーコードをスキャンしてください";
 
-      return;
+    } else {
+
+      statusText.textContent =
+        "このISBNの情報が見つかりません。下のバーコードをスキャンしてください";
     }
-
-
-    /*
-     * openBDに登録されていない
-     */
-
-    statusText.textContent =
-      "このISBNの情報が見つかりません。下のバーコードをスキャンしてください";
   }
 
 
   /*
    * ----------------------------------------
    * 2段目JAN処理
-   *
-   * ISBNとは完全に独立
    * ----------------------------------------
    */
 
@@ -773,8 +834,8 @@
     /*
      * ISBNとの紐付けはしない。
      *
-     * 2段目だけ読んだ場合は
-     * 必ずタイトル不明として追加。
+     * 2段目だけ読んだ場合も
+     * タイトル不明として追加。
      */
 
     const added =
@@ -786,6 +847,12 @@
 
 
     if (added) {
+
+      /*
+       * 2段目を正常処理したら
+       * 2段目待ち状態を解除。
+       */
+      waitingForSecondJAN = false;
 
       statusText.classList.remove(
         "error"
@@ -817,7 +884,10 @@
 
 
     /*
-     * まず2段目JAN
+     * まず2段目JANを判定。
+     *
+     * 192から始まるコードは
+     * ISBNとして扱わない。
      */
     if (
       isValidBookJANSecondCode(code)
@@ -825,6 +895,18 @@
 
       handleBookJAN(code);
 
+      return;
+    }
+
+
+    /*
+     * 2段目待ちの場合、
+     * ISBNなど別のコードは無視。
+     *
+     * エラーメッセージを
+     * そのまま維持する。
+     */
+    if (waitingForSecondJAN) {
       return;
     }
 
@@ -1031,7 +1113,33 @@
 
 
     /*
-     * 手入力でも
+     * 2段目待ち中は
+     * 手入力ISBNも処理しない。
+     */
+    if (waitingForSecondJAN) {
+
+      statusText.classList.add(
+        "error"
+      );
+
+      statusText.textContent =
+        "下のバーコードをスキャンしてください";
+
+      return;
+    }
+
+
+    /*
+     * 現在検索中なら無視。
+     */
+    if (
+      processingISBN === isbn
+    ) {
+      return;
+    }
+
+
+    /*
      * 同じISBN連続チェック
      */
     if (
@@ -1049,7 +1157,7 @@
     }
 
 
-    lastISBN = isbn;
+    processingISBN = isbn;
 
 
     statusText.classList.remove(
@@ -1066,30 +1174,53 @@
       );
 
 
+    processingISBN = "";
+
+
     if (
       info &&
       info.title &&
       info.price != null
     ) {
 
-      addBookRecord(
-        isbn,
-        info.title,
-        info.price
-      );
+      const added =
+        addBookRecord(
+          isbn,
+          info.title,
+          info.price
+        );
 
 
-      statusText.textContent =
-        info.title +
-        " / " +
-        info.price.toLocaleString() +
-        "円";
+      if (added) {
+
+        lastISBN = isbn;
+
+        waitingForSecondJAN = false;
+
+        statusText.textContent =
+          info.title +
+          " / " +
+          info.price.toLocaleString() +
+          "円";
 
 
-      isbnInput.value = "";
+        isbnInput.value = "";
+      }
 
       return;
     }
+
+
+    /*
+     * 手入力でも価格が取れなければ
+     * 2段目待ち状態にする。
+     */
+    waitingForSecondJAN = true;
+
+
+    statusText.classList.add(
+      "error"
+    );
 
 
     if (
@@ -1099,12 +1230,12 @@
 
       statusText.textContent =
         info.title +
-        "：価格情報が見つかりません";
+        "：価格情報が見つかりません。下のバーコードをスキャンしてください";
 
     } else {
 
       statusText.textContent =
-        "このISBNの情報が見つかりません";
+        "このISBNの情報が見つかりません。下のバーコードをスキャンしてください";
     }
   }
 
@@ -1438,6 +1569,10 @@
       priceCounts = {};
 
       lastISBN = "";
+
+      processingISBN = "";
+
+      waitingForSecondJAN = false;
 
 
       statusText.classList.remove(
