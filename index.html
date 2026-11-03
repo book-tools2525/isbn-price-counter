@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ISBNカウンター</title>
+  <title>ISBN・JANプライスカウンター</title>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 
@@ -27,6 +27,9 @@
       margin-bottom: 20px;
     }
 
+    .mode-switch { display: flex; gap: 8px; margin-bottom: 15px; }
+    .mode-switch button { flex: 1; background: #e4e4e4; color: #333; border: 2px solid transparent; font-weight: bold; }
+    .mode-switch button.active { background: #245f9d; color: white; border-color: #17456f; }
     .camera-box {
       background: white;
       padding: 15px;
@@ -205,7 +208,12 @@
 
 <div class="container">
 
-  <h1>ISBNカウンター</h1>
+  <h1>プライスカウンター</h1>
+
+  <div class="mode-switch" aria-label="読み取りモード">
+    <button id="isbnModeButton" class="active" type="button" aria-pressed="true">ISBNモード</button>
+    <button id="janModeButton" type="button" aria-pressed="false">JANモード</button>
+  </div>
 
   <div class="camera-box">
 
@@ -308,7 +316,12 @@
 let codeReader = null;
 let controls = null;
 
-let books = [];
+let currentMode = "isbn";
+// モード別に集計を保存し、切り替えても混ざらないようにする。
+const modeRecords = { isbn: [], jan: [] };
+let books = modeRecords.isbn;
+let lastJAN = "";
+let processingModeToken = 0;
 let totalBooks = 0;
 let totalPrice = 0;
 let priceCounts = {};
@@ -330,6 +343,34 @@ let waitingForSecondJAN = false;
  * このISBNを本の一覧に保存する。
  */
 let waitingISBN = "";
+
+const isbnModeButton = document.getElementById("isbnModeButton");
+const janModeButton = document.getElementById("janModeButton");
+const bookHeading = document.querySelector(".books h2");
+
+function setMode(mode) {
+  if (mode === currentMode) return;
+  currentMode = mode;
+  processingModeToken++;
+  books = modeRecords[mode];
+  lastISBN = "";
+  lastJAN = "";
+  processingISBN = "";
+  waitingForSecondJAN = false;
+  waitingISBN = "";
+  isbnInput.value = "";
+  isbnInput.placeholder = mode === "jan" ? "下段JAN13桁を入力" : "ISBN13桁を入力";
+  bookHeading.textContent = mode === "jan" ? "登録した金額" : "登録した本";
+  isbnModeButton.classList.toggle("active", mode === "isbn");
+  janModeButton.classList.toggle("active", mode === "jan");
+  isbnModeButton.setAttribute("aria-pressed", String(mode === "isbn"));
+  janModeButton.setAttribute("aria-pressed", String(mode === "jan"));
+  statusText.classList.remove("error");
+  statusText.textContent = mode === "jan"
+    ? "下段の価格バーコード（192で始まる13桁）を読み取ってください"
+    : "ISBNバーコードを緑枠に合わせてください";
+  updateDisplay();
+}
 
 const video =
   document.getElementById("video");
@@ -422,7 +463,7 @@ async function startCamera() {
       );
 
     statusText.textContent =
-      "ISBNバーコードを緑枠に合わせてください";
+      currentMode === "jan" ? "下段の価格バーコードを緑枠に合わせてください" : "ISBNバーコードを緑枠に合わせてください";
 
   } catch (error) {
 
@@ -742,6 +783,7 @@ function addBookRecord(
  * ISBN処理
  */
 async function handleISBN(isbn) {
+  const token = processingModeToken;
 
   /*
    * 下段JAN待ち中はISBNを受け付けない。
@@ -787,6 +829,7 @@ async function handleISBN(isbn) {
       isbn
     );
 
+  if (token !== processingModeToken || currentMode !== "isbn") return;
   processingISBN = "";
 
   /*
@@ -920,6 +963,11 @@ function handleBookJAN(code) {
  * バーコード処理
  */
 function handleBarcode(text) {
+  if (currentMode === "jan") {
+    const jan = normalizeISBN(text);
+    handleJANOnly(jan);
+    return;
+  }
 
   const code =
     normalizeISBN(text);
@@ -982,9 +1030,42 @@ function handleBarcode(text) {
 
 
 /*
+ * JAN専用モード：下段の価格バーコードだけで集計する。
+ * 同じJANの連続登録を防止（同額をもう1冊登録する場合は
+ * ほかの金額を挟むか「1冊戻す」後に再読取）。
+ */
+function handleJANOnly(code) {
+  if (currentMode !== "jan") return;
+  const price = getPriceFromBookJAN(code);
+  if (price == null) return;
+  if (lastJAN === code) {
+    statusText.classList.add("error");
+    statusText.textContent = "⚠️ 同じJANが連続しています";
+    return;
+  }
+  if (addBookRecord("", "", price)) {
+    lastJAN = code;
+    statusText.classList.remove("error");
+    statusText.textContent = price.toLocaleString() + "円を登録しました";
+  }
+}
+
+/*
  * 手入力ISBN
  */
 async function addManualISBN() {
+  if (currentMode === "jan") {
+    const jan = normalizeISBN(isbnInput.value);
+    if (!isValidBookJANSecondCode(jan) || getPriceFromBookJAN(jan) == null) {
+      statusText.classList.add("error");
+      statusText.textContent = "⚠️ 192で始まる正しい下段JAN13桁を入力してください";
+      return;
+    }
+    handleJANOnly(jan);
+    isbnInput.value = "";
+    return;
+  }
+  const token = processingModeToken;
 
   const isbn =
     normalizeISBN(
@@ -1055,6 +1136,7 @@ async function addManualISBN() {
       isbn
     );
 
+  if (token !== processingModeToken || currentMode !== "isbn") return;
   processingISBN = "";
 
   /*
@@ -1142,6 +1224,8 @@ function undoLastBook() {
 
   const book =
     books.pop();
+  if (currentMode === "jan") lastJAN = "";
+  else lastISBN = "";
 
   totalBooks--;
 
@@ -1180,6 +1264,10 @@ function undoLastBook() {
  * 表示更新
  */
 function updateDisplay() {
+  totalBooks = books.length;
+  totalPrice = books.reduce((sum, book) => sum + book.price, 0);
+  priceCounts = {};
+  for (const book of books) priceCounts[book.price] = (priceCounts[book.price] || 0) + 1;
 
   totalBooksElement.textContent =
     totalBooks.toLocaleString();
@@ -1189,48 +1277,22 @@ function updateDisplay() {
     "円";
 
 
-  /*
-   * 本一覧
-   */
+  /* 本一覧：JANモードでは金額だけを表示する。 */
   if (!books.length) {
-
-    bookList.innerHTML =
-      '<div class="empty">まだ本がありません</div>';
-
+    bookList.innerHTML = '<div class="empty">まだ登録がありません</div>';
+  } else if (currentMode === "jan") {
+    bookList.innerHTML = books.map(book =>
+      '<div class="book-item"><div class="book-title">' +
+      book.price.toLocaleString() + '円</div></div>'
+    ).join("");
   } else {
-
-    bookList.innerHTML =
-      books
-        .map(
-          (book, index) => {
-
-            const isbnText =
-              book.isbn
-                ? book.isbn
-                : "ISBNなし";
-
-            return `
-              <div class="book-item">
-
-                <div class="book-title">
-                  ${escapeHTML(book.title)}
-                </div>
-
-                <div class="book-meta">
-                  ${isbnText}
-                  /
-                  ${book.price.toLocaleString()}円
-                </div>
-
-              </div>
-            `;
-
-          }
-        )
-        .join("");
-
+    bookList.innerHTML = books.map(book => {
+      const isbnText = book.isbn || "ISBNなし";
+      return '<div class="book-item"><div class="book-title">' +
+        escapeHTML(book.title) + '</div><div class="book-meta">' +
+        isbnText + ' / ' + book.price.toLocaleString() + '円</div></div>';
+    }).join("");
   }
-
 
   /*
    * 価格別集計
@@ -1357,7 +1419,9 @@ function beep() {
  */
 function resetAll() {
 
-  books = [];
+  modeRecords[currentMode] = [];
+  books = modeRecords[currentMode];
+  lastJAN = "";
 
   totalBooks = 0;
 
@@ -1388,6 +1452,9 @@ function resetAll() {
 /*
  * イベント
  */
+isbnModeButton.addEventListener("click", () => setMode("isbn"));
+janModeButton.addEventListener("click", () => setMode("jan"));
+
 startCameraButton.addEventListener(
   "click",
   startCamera
