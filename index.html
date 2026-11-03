@@ -315,6 +315,7 @@
 
 let codeReader = null;
 let controls = null;
+let cameraStarting = false; // 起動処理の二重実行を防止
 
 let currentMode = "isbn";
 // モード別に集計を保存し、切り替えても混ざらないようにする。
@@ -413,65 +414,60 @@ const resetButton =
  */
 async function startCamera() {
 
-  if (controls) {
-    return;
-  }
+  // カメラ準備中にも再度押せてしまう問題を防ぐ。
+  if (cameraStarting || controls) return;
 
-  statusText.textContent =
-    "カメラを起動しています…";
+  cameraStarting = true;
+  startCameraButton.disabled = true;
+  startCameraButton.textContent = "カメラ起動中…";
+  statusText.classList.remove("error");
+  statusText.textContent = "カメラを起動しています…";
 
   try {
+    // 前回の起動失敗で残ったリーダーがあれば解放する。
+    if (codeReader) {
+      codeReader.reset();
+    }
+    codeReader = new ZXing.BrowserMultiFormatReader();
 
-    codeReader =
-      new ZXing.BrowserMultiFormatReader();
-
-    const videoInputDevices =
-      await codeReader.listVideoInputDevices();
-
+    const videoInputDevices = await codeReader.listVideoInputDevices();
     if (!videoInputDevices.length) {
       throw new Error("カメラが見つかりません");
     }
 
-    let selectedDevice =
-      videoInputDevices.find(
-        device =>
-          /back|rear|environment/i.test(
-            device.label
-          )
-      );
-
+    let selectedDevice = videoInputDevices.find(
+      device => /back|rear|environment|背面|後面/i.test(device.label)
+    );
     if (!selectedDevice) {
-      selectedDevice =
-        videoInputDevices[
-          videoInputDevices.length - 1
-        ];
+      selectedDevice = videoInputDevices[videoInputDevices.length - 1];
     }
 
-    controls =
-      await codeReader.decodeFromVideoDevice(
-        selectedDevice.deviceId,
-        video,
-        (result, error) => {
+    controls = await codeReader.decodeFromVideoDevice(
+      selectedDevice.deviceId,
+      video,
+      (result, error) => {
+        if (result) handleBarcode(result.getText());
+      }
+    );
 
-          if (result) {
-            handleBarcode(
-              result.getText()
-            );
-          }
-
-        }
-      );
-
-    statusText.textContent =
-      currentMode === "jan" ? "下段の価格バーコードを緑枠に合わせてください" : "ISBNバーコードを緑枠に合わせてください";
+    statusText.textContent = currentMode === "jan"
+      ? "下段の価格バーコードを緑枠に合わせてください"
+      : "ISBNバーコードを緑枠に合わせてください";
+    startCameraButton.textContent = "カメラ起動済み";
 
   } catch (error) {
-
     console.error(error);
-
-    statusText.textContent =
-      "カメラを起動できませんでした";
-
+    if (codeReader) {
+      try { codeReader.reset(); } catch (_) {}
+    }
+    controls = null;
+    codeReader = null;
+    statusText.classList.add("error");
+    statusText.textContent = "カメラを起動できませんでした。もう一度お試しください";
+    startCameraButton.disabled = false;
+    startCameraButton.textContent = "カメラを起動";
+  } finally {
+    cameraStarting = false;
   }
 }
 
